@@ -20,6 +20,9 @@ namespace Jellyfin.Plugin.ProviderStuff.ScheduledTasks;
 
 /// <summary>
 /// Scheduled task to apply provider tags.
+/// Ported from original ProviderStuff by kamilkosek.
+/// Fixed for Jellyfin 10.11: ILibraryManager.GetItemList() was removed.
+/// Replaced with GetItemListResult(query).Items (returns BaseItem[]).
 /// </summary>
 public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
 {
@@ -32,12 +35,12 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
     /// <summary>
     /// Initializes a new instance of the <see cref="ApplyProviderTagsTask"/> class.
     /// </summary>
-    /// <param name="libraryManager">The library manager used to query and update media items.</param>
-    /// <param name="logger">The logger to record diagnostic and error messages.</param>
-    /// <param name="providerService">The service used to fetch provider IDs from TMDB.</param>
-    /// <param name="config">The configuration manager to access plugin settings.</param>
-    /// <param name="collectionManager">The collection manager for creating and updating collections.</param>
-    public ApplyProviderTagsTask(ILibraryManager libraryManager, ILogger<ApplyProviderTagsTask> logger, ProviderService providerService, IConfigurationManager config, ICollectionManager collectionManager)
+    public ApplyProviderTagsTask(
+        ILibraryManager libraryManager,
+        ILogger<ApplyProviderTagsTask> logger,
+        ProviderService providerService,
+        IConfigurationManager config,
+        ICollectionManager collectionManager)
     {
         _libraryManager = libraryManager;
         _logger = logger;
@@ -47,59 +50,36 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
         _logger.LogInformation("Got config: {Config}", _config);
     }
 
-    /// <summary>
-    /// Gets Name of the task.
-    /// </summary>
+    /// <inheritdoc />
     public string Name => "ProviderStuff: Apply provider tags";
 
-    /// <summary>
-    /// Gets Description of the task.
-    /// </summary>
-    public string Description => "Fetch providers from TMDB and apply provider:<name> tags to items with TMDB IDs.";
+    /// <inheritdoc />
+    public string Description => "Fetch providers from TMDB and apply provider:<n> tags to items with TMDB IDs.";
 
-    /// <summary>
-    /// Gets Category of the task.
-    /// </summary>
+    /// <inheritdoc />
     public string Category => "Metadata";
 
-    /// <summary>
-    /// Gets Key of the task.
-    /// </summary>
+    /// <inheritdoc />
     public string Key => "providerstuff.applyprovidertags";
 
-    /// <summary>
-    /// Gets a value indicating whether the task is hidden.
-    /// </summary>
+    /// <inheritdoc />
     public bool IsHidden => false;
 
-/// <summary>
-/// Gets a value indicating whether the task is enabled by default.
-/// </summary>
+    /// <inheritdoc />
     public bool IsEnabled => true;
 
-    /// <summary>
-    /// Gets a value indicating whether the task execution is logged.
-    /// </summary>
+    /// <inheritdoc />
     public bool IsLogged => true;
 
-    /// <summary>
-    /// Gets default triggers for the task.
-    /// </summary>
-    /// <returns>default triggers.</returns>
+    /// <inheritdoc />
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
         yield return new TaskTriggerInfo { Type = TaskTriggerInfo.TriggerDaily, TimeOfDayTicks = TimeSpan.FromHours(3).Ticks };
     }
 
-    /// <summary>
-    /// Executes the task.
-    /// </summary>
-    /// <param name="progress">progress.</param>
-    /// <param name="cancellationToken">ct .</param>
-    /// <returns>Task.</returns>
+    /// <inheritdoc />
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
     {
-        // Resolve configuration once
         var cfg = Plugin.Instance?.Configuration;
         if (cfg is null || string.IsNullOrWhiteSpace(cfg.TmdbApiKey) || cfg.Providers is null || cfg.Providers.Length == 0)
         {
@@ -111,25 +91,30 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
         var providersNeedingCollections = cfg.Providers.Where(p => p.CreateCollection).ToArray();
         var collectionIdsByProvider = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         var pendingAddsByCollection = new Dictionary<Guid, HashSet<Guid>>();
+
         if (providersNeedingCollections.Length > 0)
         {
             _logger.LogInformation("Preparing collections for {Count} providers", providersNeedingCollections.Length);
             foreach (var provider in providersNeedingCollections)
             {
                 var collectionName = provider.Name;
-                var collections = _libraryManager.GetItemList(new InternalItemsQuery
+
+                // ── 10.11 FIX ──────────────────────────────────────────────────────────
+                // GetItemList(InternalItemsQuery) was REMOVED in Jellyfin 10.10/10.11.
+                // Replacement: GetItemListResult(query).Items returns BaseItem[]
+                // ───────────────────────────────────────────────────────────────────────
+                var collections = _libraryManager.GetItemListResult(new InternalItemsQuery
                 {
                     IncludeItemTypes = new[] { BaseItemKind.BoxSet },
                     Name = collectionName,
                     Recursive = true
-                });
+                }).Items;
 
-                if (collections.Count > 0 && collections[0] is BoxSet existing)
+                if (collections.Length > 0 && collections[0] is BoxSet existing)
                 {
                     collectionIdsByProvider[provider.Name] = existing.Id;
                     pendingAddsByCollection[existing.Id] = new HashSet<Guid>();
 
-                    // Ensure the collection has a primary image if configured
                     try
                     {
                         await EnsureCollectionImageAsync(existing, provider, cancellationToken).ConfigureAwait(false);
@@ -147,7 +132,7 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
                     _logger.LogInformation("Created collection '{Collection}'", collectionName);
                     boxSet.PremiereDate = DateTime.UtcNow;
                     await _libraryManager.UpdateItemAsync(boxSet, boxSet, ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-                    // Try to set image right after creation
+
                     try
                     {
                         await EnsureCollectionImageAsync(boxSet, provider, cancellationToken).ConfigureAwait(false);
@@ -160,15 +145,20 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
             }
         }
 
-        var items = _libraryManager.GetItemList(new InternalItemsQuery
+        // ── 10.11 FIX ──────────────────────────────────────────────────────────────
+        // Same fix: GetItemList → GetItemListResult(...).Items
+        // Items is BaseItem[] so use .Length instead of .Count
+        // ───────────────────────────────────────────────────────────────────────────
+        var items = _libraryManager.GetItemListResult(new InternalItemsQuery
         {
             IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Episode },
             Recursive = true
-        });
+        }).Items;
 
-        var total = items.Count;
+        var total = items.Length;
         var done = 0;
         _logger.LogInformation("Starting provider tag application for {Total} items", total);
+
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -182,9 +172,8 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
             }
 
             done++;
-
             progress.Report(100.0 * done / total);
-            // log every 100 items
+
             if (done % 100 == 0)
             {
                 _logger.LogInformation("Processed {Done}/{Total} items", done, total);
@@ -192,33 +181,29 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
         }
 
         // Batch add accumulated items to their collections
-        if (pendingAddsByCollection.Count > 0)
+        foreach (var kvp in pendingAddsByCollection)
         {
-            foreach (var kvp in pendingAddsByCollection)
+            var collectionId = kvp.Key;
+            var itemIds = kvp.Value;
+            if (itemIds.Count == 0)
             {
-                var collectionId = kvp.Key;
-                var itemIds = kvp.Value;
-                if (itemIds.Count == 0)
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                try
-                {
-                    await _collectionManager.AddToCollectionAsync(collectionId, itemIds).ConfigureAwait(false);
-                    _logger.LogInformation("Added {Count} items to collection {CollectionId}", itemIds.Count, collectionId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to batch add items to collection {CollectionId}", collectionId);
-                }
+            try
+            {
+                await _collectionManager.AddToCollectionAsync(collectionId, itemIds).ConfigureAwait(false);
+                _logger.LogInformation("Added {Count} items to collection {CollectionId}", itemIds.Count, collectionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to batch add items to collection {CollectionId}", collectionId);
             }
         }
     }
 
     private async Task EnsureCollectionImageAsync(BoxSet collection, Provider provider, CancellationToken ct)
     {
-        // Only proceed if a logo url is configured and the collection has no primary image yet
         if (collection is null)
         {
             return;
@@ -231,13 +216,12 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
 
         if (collection.HasImage(ImageType.Primary, 0))
         {
-            return; // don't overwrite existing imagery
+            return;
         }
 
         var url = provider.ProviderLogoUrl.Trim();
         _logger.LogInformation("Setting primary image for collection '{Name}' from {Url}", collection.Name, url);
 
-        // Add as remote image first
         var remoteImage = new ItemImageInfo
         {
             Path = url,
@@ -246,13 +230,10 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
         };
 
         collection.AddImage(remoteImage);
-
-        // Persist image info
         await _libraryManager.UpdateItemAsync(collection, collection, ItemUpdateType.ImageUpdate, ct).ConfigureAwait(false);
 
         try
         {
-            // Convert to local so it survives and benefits from caching/processing
             var index = collection.GetImageIndex(remoteImage);
             await _libraryManager.ConvertImageToLocal(collection, remoteImage, index, removeOnFailure: true).ConfigureAwait(false);
             await _libraryManager.UpdateImagesAsync(collection, forceUpdate: true).ConfigureAwait(false);
@@ -264,15 +245,21 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
         }
     }
 
-    private async Task ProcessItemAsync(BaseItem item, PluginConfiguration cfg, Dictionary<string, Guid> collectionIdsByProvider, Dictionary<Guid, HashSet<Guid>> pendingAddsByCollection, CancellationToken ct)
+    private async Task ProcessItemAsync(
+        BaseItem item,
+        PluginConfiguration cfg,
+        Dictionary<string, Guid> collectionIdsByProvider,
+        Dictionary<Guid, HashSet<Guid>> pendingAddsByCollection,
+        CancellationToken ct)
     {
         string? tmdbId = null;
         if (item.ProviderIds is not null)
         {
-            // Prefer the canonical "Tmdb" key; fall back to case-insensitive lookup
             if (!item.ProviderIds.TryGetValue("Tmdb", out tmdbId))
             {
-                tmdbId = item.ProviderIds.FirstOrDefault(kv => string.Equals(kv.Key, "Tmdb", StringComparison.OrdinalIgnoreCase)).Value;
+                tmdbId = item.ProviderIds
+                    .FirstOrDefault(kv => string.Equals(kv.Key, "Tmdb", StringComparison.OrdinalIgnoreCase))
+                    .Value;
             }
         }
 
@@ -280,8 +267,6 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
         {
             return;
         }
-
-        // cfg validated in ExecuteAsync
 
         var contentType = item switch
         {
@@ -337,6 +322,4 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
             _logger.LogInformation("Applied provider tags to {Name}: {Tags}", item.Name, string.Join(", ", matched));
         }
     }
-
-    // removed per-item collection lookup helper; collections are prepared up-front in ExecuteAsync
 }
