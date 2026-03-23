@@ -100,3 +100,4 @@ jobs:
           files: providerstuff-${{ steps.version.outputs.VERSION }}.zip
           draft: false
           prerelease: false
+          
