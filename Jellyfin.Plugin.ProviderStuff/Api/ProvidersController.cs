@@ -64,7 +64,7 @@ public class ProvidersController : ControllerBase
                         IncludeItemTypes = new[] { BaseItemKind.BoxSet },
                         Name = p.Name,
                         Recursive = true
-                    });
+                    }, false);
                     var existing = items.FirstOrDefault();
                     if (existing is not null)
                     {
@@ -122,7 +122,7 @@ public class ProvidersController : ControllerBase
         };
 
         // Get total count (could be optimized with dedicated count API if available)
-        var totalItems = _libraryManager.GetItemList(baseQuery);
+        var totalItems = _libraryManager.GetItemList(baseQuery, false);
         var total = totalItems.Count;
 
         // Page query
@@ -135,7 +135,7 @@ public class ProvidersController : ControllerBase
             Limit = limit is > 0 ? limit : null
         };
 
-        var pageItems = _libraryManager.GetItemList(query);
+        var pageItems = _libraryManager.GetItemList(query, false);
         var user = userId.HasValue ? _userManager.GetUserById(userId.Value) : null;
         var dtos = _dtoService.GetBaseItemDtos(pageItems, new DtoOptions(), user).ToArray();
         var result = new QueryResult<BaseItemDto>
