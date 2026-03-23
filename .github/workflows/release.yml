@@ -1,74 +1,102 @@
-name: "Create release"
+name: Build and Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to release (e.g., 1.2.0.0). Optional if running on tag push."
-        required: false
-        type: string
   push:
     tags:
-      - '*'
-
-permissions:
-  contents: write
-  pull-requests: write
+      - 'v*.*.*.*'   # triggers on tags like v1.3.0.0
 
 jobs:
-  main:
-    name: Create release
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to create GitHub releases
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup .NET
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: '8.0.x'
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Determine version
-        id: ver
+      - name: Restore dependencies
+        run: dotnet restore Jellyfin.Plugin.ProviderStuff/Jellyfin.Plugin.ProviderStuff.csproj
+
+      - name: Build and publish
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            # On tag push, github.ref_name is the tag name
-            if [[ "${{ github.ref_type }}" == "tag" ]]; then
-              echo "VERSION=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-            else
-              # Fallback to latest tag
-              echo "VERSION=$(git describe --tags --abbrev=0 || echo 1.1.0.0)" >> "$GITHUB_OUTPUT"
-            fi
-          fi
+          dotnet publish Jellyfin.Plugin.ProviderStuff/Jellyfin.Plugin.ProviderStuff.csproj \
+            -c Release \
+            -o ./publish \
+            /p:AssemblyVersion=${{ steps.version.outputs.VERSION }} \
+            /p:FileVersion=${{ steps.version.outputs.VERSION }} \
+            /p:Version=${{ steps.version.outputs.VERSION }}
 
-      - name: Build and release (no tag creation in CI)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.ver.outputs.VERSION }}
+      - name: Package zip
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          echo "Releasing version: ${VERSION}"
-          # Ensure optional packages directory exists to satisfy Makefile zip step
-          mkdir -p packages
-          make ci-release
+          cd publish
+          zip ../providerstuff-${{ steps.version.outputs.VERSION }}.zip Jellyfin.Plugin.ProviderStuff.dll
+          cd ..
 
-      - name: Commit and push updated manifest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute checksum
+        id: checksum
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          VERSION="${{ steps.ver.outputs.VERSION }}"
+          MD5=$(md5sum providerstuff-${{ steps.version.outputs.VERSION }}.zip | awk '{print $1}')
+          echo "MD5=$MD5" >> $GITHUB_OUTPUT
+
+      - name: Update manifest.json checksum and timestamp
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          MD5=${{ steps.checksum.outputs.MD5 }}
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          # Update checksum and timestamp in the versions array for this version
+          python3 -c "
+          import json, sys
+          with open('manifest.json') as f:
+              data = json.load(f)
+          for plugin in data:
+              for v in plugin.get('versions', []):
+                  if v['version'] == '$VERSION':
+                      v['checksum'] = '$MD5'
+                      v['timestamp'] = '$TIMESTAMP'
+          with open('manifest.json', 'w') as f:
+              json.dump(data, f, indent=2)
+          print('manifest.json updated')
+          "
+
+      - name: Commit updated manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add manifest.json
-          git commit -m "chore(release): update manifest for ${VERSION}" || echo "No changes to commit"
-          git push
+          git commit -m "chore: update manifest checksum for v${{ steps.version.outputs.VERSION }}" || echo "No changes to commit"
+          git push origin HEAD:main || echo "Push skipped"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "ProviderStuff v${{ steps.version.outputs.VERSION }} (Jellyfin 10.11)"
+          body: |
+            ## Jellyfin 10.11 compatible build
+
+            **Fix:** `ILibraryManager.GetItemList()` was removed in Jellyfin 10.10/10.11.
+            Replaced with `GetItemListResult().Items` in both call sites.
+            All other functionality is identical to upstream v1.2.0.0.
+
+            ### Install via Plugin Repository
+            Add this URL in Jellyfin → Dashboard → Plugins → Repositories:
+            ```
+            https://raw.githubusercontent.com/Abateman121/jellyfin-plugin-provider-stuff/main/manifest.json
+            ```
+
+            ### Manual Install
+            Download the zip, extract `Jellyfin.Plugin.ProviderStuff.dll` and place it in:
+            `/config/plugins/ProviderStuff_${{ steps.version.outputs.VERSION }}/`
+          files: providerstuff-${{ steps.version.outputs.VERSION }}.zip
+          draft: false
+          prerelease: false
