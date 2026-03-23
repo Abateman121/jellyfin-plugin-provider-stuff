@@ -21,8 +21,9 @@ namespace Jellyfin.Plugin.ProviderStuff.ScheduledTasks;
 /// <summary>
 /// Scheduled task to apply provider tags.
 /// Ported from original ProviderStuff by kamilkosek.
-/// Fixed for Jellyfin 10.11: ILibraryManager.GetItemList() was removed.
-/// Replaced with GetItemListResult(query).Items (returns BaseItem[]).
+/// Fixed for Jellyfin 10.11:
+/// 1. GetItemList(query) single-arg overload removed → GetItemList(query, false)
+/// 2. TaskTriggerInfo.TriggerDaily constant removed → string literal "DailyTrigger"
 /// </summary>
 public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
 {
@@ -74,7 +75,7 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
     /// <inheritdoc />
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
-        yield return new TaskTriggerInfo { Type = TaskTriggerInfo.TriggerDaily, TimeOfDayTicks = TimeSpan.FromHours(3).Ticks };
+        yield return new TaskTriggerInfo { Type = "DailyTrigger", TimeOfDayTicks = TimeSpan.FromHours(3).Ticks };
     }
 
     /// <inheritdoc />
@@ -99,18 +100,15 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
             {
                 var collectionName = provider.Name;
 
-                // ── 10.11 FIX ──────────────────────────────────────────────────────────
-                // GetItemList(InternalItemsQuery) was REMOVED in Jellyfin 10.10/10.11.
-                // Replacement: GetItemListResult(query).Items returns BaseItem[]
-                // ───────────────────────────────────────────────────────────────────────
-                var collections = _libraryManager.GetItemListResult(new InternalItemsQuery
+                // ── 10.11 FIX: add allowExternalContent=false as required second arg ──
+                var collections = _libraryManager.GetItemList(new InternalItemsQuery
                 {
                     IncludeItemTypes = new[] { BaseItemKind.BoxSet },
                     Name = collectionName,
                     Recursive = true
-                }).Items;
+                }, false).ToList();
 
-                if (collections.Length > 0 && collections[0] is BoxSet existing)
+                if (collections.Count > 0 && collections[0] is BoxSet existing)
                 {
                     collectionIdsByProvider[provider.Name] = existing.Id;
                     pendingAddsByCollection[existing.Id] = new HashSet<Guid>();
@@ -145,17 +143,14 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
             }
         }
 
-        // ── 10.11 FIX ──────────────────────────────────────────────────────────────
-        // Same fix: GetItemList → GetItemListResult(...).Items
-        // Items is BaseItem[] so use .Length instead of .Count
-        // ───────────────────────────────────────────────────────────────────────────
-        var items = _libraryManager.GetItemListResult(new InternalItemsQuery
+        // ── 10.11 FIX: same as above, add allowExternalContent=false ──────────────────
+        var items = _libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Episode },
             Recursive = true
-        }).Items;
+        }, false).ToList();
 
-        var total = items.Length;
+        var total = items.Count;
         var done = 0;
         _logger.LogInformation("Starting provider tag application for {Total} items", total);
 
