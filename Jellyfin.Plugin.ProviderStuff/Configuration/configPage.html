@@ -5,8 +5,49 @@
     <title>ProviderStuff</title>
     <style>
         .provider-row img { vertical-align:middle; margin-right:6px; }
-        /* Slightly larger than a checkbox but not by much */
         .provider-thumb { width:18px; height:18px; object-fit:contain; margin-left:4px; margin-right:8px; }
+
+        /* Fix button text visibility in Jellyfin dark theme */
+        #ProviderStuffConfigPage .emby-button:not(.button-submit) {
+            color: #fff !important;
+            background-color: #2d2d2d !important;
+            border: 1px solid #555 !important;
+        }
+        #ProviderStuffConfigPage .emby-button:not(.button-submit):hover {
+            background-color: #444 !important;
+            border-color: #aaa !important;
+        }
+        /* Remove button - red tint */
+        #ProviderStuffConfigPage .provider-row .emby-button {
+            color: #ff6b6b !important;
+            border-color: #ff6b6b !important;
+            background-color: transparent !important;
+        }
+        #ProviderStuffConfigPage .provider-row .emby-button:hover {
+            background-color: rgba(255,107,107,0.15) !important;
+        }
+        /* Provider row container */
+        #ProviderStuffConfigPage .provider-row {
+            border: 1px solid #444 !important;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: rgba(255,255,255,0.03);
+        }
+        /* Checkbox list */
+        #ProviderStuffConfigPage #ProvidersEditor div[style*="max-height"] {
+            border-color: #444 !important;
+            background: rgba(0,0,0,0.2);
+            border-radius: 4px;
+        }
+        /* Search input */
+        #ProviderStuffConfigPage input[type=search] {
+            background: #2d2d2d;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 8px;
+        }
     </style>
 </head>
 <body>
@@ -29,8 +70,8 @@
                         <label class="inputLabel inputLabelUnfocused" for="Providers">Providers</label>
                         <div id="ProvidersEditor" style="margin-bottom:8px"></div>
                         <div style="margin-bottom:8px">
-                            <button id="AddProviderBtn" is="emby-button" type="button" class="emby-button">Add provider</button>
-                            <button id="RefreshTmdbBtn" is="emby-button" type="button" class="emby-button">Refresh TMDB providers</button>
+                            <button id="AddProviderBtn" is="emby-button" type="button" class="emby-button" style="color:#fff !important; background:#2a7de1 !important; border:1px solid #2a7de1 !important; padding:8px 16px; border-radius:4px; cursor:pointer; margin-right:8px;">Add provider</button>
+                            <button id="RefreshTmdbBtn" is="emby-button" type="button" class="emby-button" style="color:#fff !important; background:#444 !important; border:1px solid #666 !important; padding:8px 16px; border-radius:4px; cursor:pointer;">Refresh TMDB providers</button>
                         </div>
                         <div class="fieldDescription">Manage providers: name, assigned TMDB provider IDs, logo URL and whether to create a collection.</div>
                     </div>
@@ -94,7 +135,7 @@
                 // provider: { Name, ProviderIds (array), ProviderLogoUrl, CreateCollection }
                 var container = document.createElement('div');
                 container.className = 'provider-row';
-                container.style = 'border:1px solid #ddd; padding:8px; margin-bottom:8px;';
+                container.style = 'border:1px solid #444; padding:10px; margin-bottom:10px; border-radius:6px; background:rgba(255,255,255,0.03);';
 
                 var nameLabel = document.createElement('label');
                 nameLabel.textContent = 'Name';
@@ -115,7 +156,7 @@
                 idsSearch.style = 'width:100%; margin-bottom:6px; padding:4px;';
 
                 var idsList = document.createElement('div');
-                idsList.style = 'max-height:180px; overflow:auto; border:1px solid #eee; padding:6px; margin-bottom:6px;';
+                idsList.style = 'max-height:180px; overflow:auto; border:1px solid #444; padding:6px; margin-bottom:6px; background:rgba(0,0,0,0.2); border-radius:4px;';
 
                 // populate options from tmdbProviders into a checkbox list with thumbnails
                 function populateOptions() {
@@ -219,7 +260,7 @@
                 btnRemove.type = 'button';
                 btnRemove.className = 'emby-button';
                 btnRemove.textContent = 'Remove';
-                btnRemove.style = 'margin-top:6px;'
+                btnRemove.style = 'margin-top:6px; color:#ff6b6b !important; border:1px solid #ff6b6b !important; background:transparent !important; padding:6px 14px; border-radius:4px; cursor:pointer;'
                 btnRemove.addEventListener('click', function () {
                     container.parentNode.removeChild(container);
                 });
