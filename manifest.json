@@ -20,7 +20,7 @@
         "changelog": "Fix for Jellyfin 10.11 compatibility: ILibraryManager.GetItemList() was removed in 10.11. Replaced with GetItemListResult().Items. All other functionality identical to upstream 1.2.0.0.",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/Abateman121/jellyfin-plugin-provider-stuff/releases/download/v1.3.1.0/providerstuff-1.3.1.0.zip",
-        "checksum": "",
+        "checksum": "96587C5BFB1C856E5FED860F6CE92B04",
         "timestamp": "2026-03-24T00:00:00Z"
       }
     ]
