@@ -2,7 +2,7 @@
   {
     "name": "ProviderStuff",
     "guid": "7cedceba-76f2-40dd-a902-b05acf337a57",
-    "version": "1.3.1.0",
+    "version": "1.3.1.2",
     "targetAbi": "10.11.0.0",
     "framework": "net9.0",
     "overview": "Applies provider tags, manages provider collections, and exposes provider/item APIs with pagination.",
@@ -16,12 +16,12 @@
     "imageUrl": "",
     "versions": [
       {
-        "version": "1.3.1.0",
-        "changelog": "Fix for Jellyfin 10.11 compatibility: ILibraryManager.GetItemList() was removed in 10.11. Replaced with GetItemListResult().Items. All other functionality identical to upstream 1.2.0.0.",
+        "version": "1.3.1.2",
+        "changelog": "Fix button text visibility in dark theme config page. 10.11 compatibility fixes.",
         "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/Abateman121/jellyfin-plugin-provider-stuff/releases/download/v1.3.1.0/providerstuff-1.3.1.0.zip",
-        "checksum": "37DCA0864144784E7FF1FB1E605A16B5",
-        "timestamp": "2026-03-24T00:00:00Z"
+        "sourceUrl": "https://github.com/Abateman121/jellyfin-plugin-provider-stuff/releases/download/v1.3.1.2/providerstuff-1.3.1.2.zip",
+        "checksum": "",
+        "timestamp": "2026-03-25T00:00:00Z"
       }
     ]
   }
