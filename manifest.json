@@ -20,8 +20,8 @@
         "changelog": "Fix button text visibility in dark theme config page. 10.11 compatibility fixes.",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/Abateman121/jellyfin-plugin-provider-stuff/releases/download/v1.3.1.2/providerstuff-1.3.1.2.zip",
-        "checksum": "",
-        "timestamp": "2026-03-25T00:00:00Z"
+        "checksum": "e0a6788402b6c859d9476643b4d7d474",
+        "timestamp": "2026-03-25T18:43:25Z"
       }
     ]
   }
