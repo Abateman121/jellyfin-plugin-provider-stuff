@@ -146,7 +146,7 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
         // ── 10.11 FIX: same as above, add allowExternalContent=false ──────────────────
         var items = _libraryManager.GetItemList(new InternalItemsQuery
         {
-            IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Episode },
+            IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series },
             Recursive = true
         }, false).ToList();
 
