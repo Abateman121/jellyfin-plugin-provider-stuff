@@ -267,8 +267,7 @@ public class ApplyProviderTagsTask : IScheduledTask, IConfigurableScheduledTask
         {
             Movie => "movie",
             Series => "tv",
-            Episode => "tv",
-            _ => "movie"
+           _ => "movie"
         };
 
         var providerIds = await _providerService.GetProvidersForAsync(tmdbId, contentType, cfg, ct).ConfigureAwait(false);
